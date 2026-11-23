@@ -1,0 +1,5 @@
+Drop your internship report (.pdf or .docx), resume, syllabus, or project source code files into this folder!
+
+Cue Copilot automatically reads everything in this folder on startup and injects the most relevant parts into every answer.
+
+Supported formats: .pdf, .docx, .txt, .md, .py, .js, .ts, .java, .cpp, .sql

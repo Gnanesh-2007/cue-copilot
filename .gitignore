@@ -1,0 +1,14 @@
+# Personal config, API keys, resumes, and session logs
+settings.json
+profile.json
+.env
+sessions/
+context/*
+!context/PUT_YOUR_REPORT_HERE.txt
+
+# Caches & dependencies
+__pycache__/
+*.pyc
+glass_ui/node_modules/
+_backup_*/
+*.log

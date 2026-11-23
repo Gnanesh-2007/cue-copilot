@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Cue Copilot Glass</title>
+<style>
+  :root {
+    --glass-bg: rgba(18, 22, 32, 0.48);
+    --glass-card: rgba(255, 255, 255, 0.06);
+    --glass-card-hover: rgba(255, 255, 255, 0.12);
+    --glass-border: rgba(255, 255, 255, 0.16);
+    --glass-border-strong: rgba(255, 255, 255, 0.25);
+    --text: #F7F9FF;
+    --dim: rgba(232, 238, 250, 0.74);
+    --faint: rgba(203, 213, 235, 0.48);
+    --accent: #7DA6FF;
+    --accent-soft: rgba(125, 166, 255, 0.22);
+    --good: #4ECCA3;
+    --warn: #FBBF24;
+    --think: #B497FF;
+    --info: #38BDF8;
+    --err: #FF5C6C;
+    --code-bg: rgba(10, 12, 18, 0.88);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; cursor: default !important; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: transparent;
+    color: var(--text);
+    font-family: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .shell {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--glass-bg);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    overflow: hidden;
+  }
+
+  /* ---- TOP CLUELY PILL BAR ---- */
+  .pill-bar {
+    height: 52px;
+    min-height: 52px;
+    padding: 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    -webkit-app-region: drag;
+    background: linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.01) 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .shell.collapsed .pill-bar { border-bottom: none; }
+
+  .no-drag { -webkit-app-region: no-drag; }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    min-width: 128px;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--good);
+    box-shadow: 0 0 10px var(--good);
+    flex-shrink: 0;
+  }
+
+  .status-text {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: var(--good);
+    white-space: nowrap;
+  }
+
+  /* Live waveform */
+  .wave {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 16px;
+    margin-left: 2px;
+  }
+  .wave span {
+    width: 2.5px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--accent);
+    opacity: 0.85;
+    transition: height 75ms ease-out;
+  }
+
+  .pill-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 4px;
+  }
+
+  .pill-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 140ms, border-color 140ms, transform 80ms;
+  }
+  .pill-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.22);
+  }
+  .pill-btn:active { transform: scale(0.97); }
+  .pill-btn.active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  .kbd {
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--dim);
+  }
+
+  .spacer { flex: 1; }
+
+  .icon-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--dim);
+    font-size: 13px;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    transition: background 120ms, color 120ms;
+  }
+  .icon-btn:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+  .icon-btn.close:hover { background: rgba(255, 92, 108, 0.35); color: #fff; }
+
+  /* ---- MAIN BODY ---- */
+  .body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 8px 12px 10px;
+    gap: 8px;
+  }
+  .shell.collapsed .body { display: none; }
+
+  /* Tabs & meta chips */
+  .sub-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    padding: 3px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.24);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .tab {
+    padding: 4px 11px;
+    border-radius: 7px;
+    border: none;
+    background: transparent;
+    color: var(--dim);
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 140ms, color 140ms;
+  }
+  .tab:hover { color: #fff; }
+  .tab.active {
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.16);
+  }
+
+  .chips {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--dim);
+    cursor: pointer;
+  }
+  .chip:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+  .chip.on { color: var(--good); border-color: rgba(78, 204, 163, 0.35); }
+  .chip.warn { color: var(--warn); border-color: rgba(251, 191, 36, 0.35); }
+
+  /* Tab panels */
+  .view { display: none; flex: 1; flex-direction: column; min-height: 0; gap: 8px; }
+  .view.active { display: flex; }
+
+  /* Question bar */
+  .q-card {
+    padding: 7px 11px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    color: var(--dim);
+    font-size: 12px;
+    font-style: italic;
+    line-height: 1.35;
+    max-height: 46px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Answer glass card — Parakeet high-contrast deep card for razor readability over white pages */
+  .answer-wrap {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border-radius: 12px;
+    background: rgba(9, 11, 16, 0.86);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
+  }
+
+  .inline-code {
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 12px;
+    padding: 1px 6px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.11);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #DCEBFF;
+  }
+
+  .answer-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .mini-btn {
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--dim);
+    font-size: 10.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 120ms, color 120ms;
+  }
+  .mini-btn:hover { background: rgba(255, 255, 255, 0.13); color: #fff; }
+
+  .answer-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 14px;
+    user-select: text;
+    line-height: 1.55;
+    font-size: 13.5px;
+    color: var(--text);
+  }
+  .answer-scroll::-webkit-scrollbar,
+  .list-scroll::-webkit-scrollbar,
+  .setup-scroll::-webkit-scrollbar { width: 6px; }
+  .answer-scroll::-webkit-scrollbar-thumb,
+  .list-scroll::-webkit-scrollbar-thumb,
+  .setup-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+  }
+
+  /* Formatted answer typography */
+  .ans-heading {
+    margin: 10px 0 4px;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.9px;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  .ans-heading:first-child { margin-top: 0; }
+  .ans-lead {
+    font-size: 14px;
+    font-weight: 500;
+    color: #FFFFFF;
+    margin-bottom: 6px;
+  }
+  .ans-bullet {
+    display: flex;
+    gap: 8px;
+    margin: 4px 0;
+    color: rgba(242, 245, 252, 0.92);
+  }
+  .ans-bullet::before {
+    content: "•";
+    color: var(--accent);
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+  .ans-code-wrap {
+    position: relative;
+    margin: 8px 0;
+  }
+  .ans-code {
+    padding: 11px 13px;
+    border-radius: 10px;
+    background: var(--code-bg);
+    border: 1px solid rgba(125, 166, 255, 0.22);
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 12.2px;
+    color: #E6EDF3;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+  }
+  .code-copy {
+    position: absolute;
+    top: 7px;
+    right: 8px;
+    padding: 2px 7px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(255,255,255,0.08);
+    color: var(--dim);
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .code-copy:hover { background: rgba(255,255,255,0.18); color: #fff; }
+  .tok-kw { color: #FF7B72; font-weight: 600; }
+  .tok-fn { color: #D2A8FF; }
+  .tok-str { color: #A5D6FF; }
+  .tok-num { color: #79C0FF; }
+  .tok-cmt { color: #8B949E; font-style: italic; }
+
+  /* Parakeet Mini-Pill Mode when clicked Hide */
+  .mini-bar {
+    display: none;
+    height: 46px;
+    padding: 0 10px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    -webkit-app-region: drag;
+  }
+  .shell.mini .mini-bar { display: flex; }
+  .shell.mini .pill-bar, .shell.mini .body { display: none !important; }
+  .mini-brand { font-weight: 800; font-size: 13px; letter-spacing: 0.2px; display:flex; align-items:center; gap:6px; }
+  .btn-show {
+    padding: 5px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: #0D1017;
+    color: #fff;
+    font-weight: 700;
+    font-size: 12px;
+  }
+  .btn-show:hover { background: #1C2333; }
+  .btn-exit-red {
+    width: 28px; height: 28px;
+    border-radius: 8px; border: none;
+    background: #E11D48; color: #fff;
+    font-weight: 700; font-size: 13px;
+  }
+  .btn-exit-red:hover { background: #F43F5E; }
+  .ans-p { margin: 4px 0; }
+
+  /* Suggestions + Ask Bar */
+  .ask-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .suggest-chip {
+    padding: 4px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(125, 166, 255, 0.24);
+    background: rgba(125, 166, 255, 0.09);
+    color: #D7E5FF;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .suggest-chip:hover { background: rgba(125, 166, 255, 0.22); color: #fff; }
+
+  .ask-input {
+    flex: 1;
+    height: 30px;
+    padding: 0 11px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(0, 0, 0, 0.32);
+    color: #fff;
+    font-size: 12px;
+    outline: none;
+    user-select: text;
+  }
+  .ask-input:focus { border-color: var(--accent); }
+  .ask-input::placeholder { color: var(--faint); }
+
+  /* Transcript & History lists */
+  .list-scroll {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-right: 2px;
+  }
+  .msg {
+    padding: 8px 11px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    user-select: text;
+  }
+  .msg.you {
+    background: rgba(125, 166, 255, 0.10);
+    border-color: rgba(125, 166, 255, 0.22);
+  }
+  .msg-who {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--good);
+    margin-bottom: 2px;
+  }
+  .msg.you .msg-who { color: var(--accent); }
+  .hist-item { cursor: pointer; }
+  .hist-item:hover { background: rgba(255, 255, 255, 0.11); }
+
+  /* Setup Form */
+  .setup-scroll {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-right: 4px;
+  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .field label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    color: var(--dim);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+  .field input, .field select, .field textarea {
+    width: 100%;
+    padding: 6px 9px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    background: rgba(0, 0, 0, 0.34);
+    color: #fff;
+    font-family: inherit;
+    font-size: 12px;
+    outline: none;
+    user-select: text;
+  }
+  .field select option { background: #141824; color: #fff; }
+  .field textarea { resize: vertical; min-height: 54px; }
+  .setup-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding-top: 4px;
+  }
+  .btn-primary {
+    padding: 6px 13px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: #09101D;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .btn-primary:hover { filter: brightness(1.1); }
+
+  /* Footer */
+  .footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--faint);
+    padding-top: 2px;
+  }
+  .toast {
+    color: var(--good);
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+<div class="shell" id="shell">
+  <!-- PARAKEET MINI-PILL MODE (when Hide clicked) -->
+  <div class="mini-bar">
+    <div class="mini-brand"><span class="dot" style="width:7px;height:7px;"></span> CueAI</div>
+    <div class="no-drag" style="display:flex;align-items:center;gap:6px;">
+      <button class="btn-show" onclick="toggleMiniPill(false)">Show</button>
+      <button class="btn-exit-red" onclick="closeAll()">✕</button>
+    </div>
+  </div>
+
+  <!-- TOP FLOATING CLUELY PILL BAR -->
+  <div class="pill-bar">
+    <div class="status-pill">
+      <div class="dot" id="statusDot"></div>
+      <div class="status-text" id="statusText">LISTENING</div>
+      <div class="wave" id="wave">
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+    </div>
+
+    <div class="pill-actions no-drag">
+      <button class="pill-btn" onclick="send({type:'force_answer'})">⚡ Answer <span class="kbd">F7</span></button>
+      <button class="pill-btn" onclick="send({type:'screen_ocr'})">📸 Screen <span class="kbd">F9</span></button>
+      <button class="pill-btn" id="btnRead" onclick="toggleTeleprompter()">📖 Read <span class="kbd">F11</span></button>
+      <button class="pill-btn" onclick="toggleMiniPill(true)">👁 Hide <span class="kbd">F8</span></button>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="no-drag" style="display:flex;align-items:center;gap:5px;">
+      <span class="chip" id="sessionTimer" style="font-size:10.5px;padding:3px 8px;">⏱ 0m</span>
+      <button class="icon-btn" title="Cycle Glass Opacity" onclick="cycleOpacity()">◐</button>
+      <button class="icon-btn" id="btnCollapse" title="Collapse to Pill Bar" onclick="toggleCollapse()">▴</button>
+      <button class="icon-btn close" title="Close Cue Copilot" onclick="closeAll()">✕</button>
+    </div>
+  </div>
+
+  <!-- EXPANDABLE FROSTED GLASS PANEL -->
+  <div class="body">
+    <div class="sub-bar">
+      <div class="tabs">
+        <button class="tab active" data-tab="answer" onclick="switchTab('answer')">Answer</button>
+        <button class="tab" data-tab="transcript" onclick="switchTab('transcript')">Transcript</button>
+        <button class="tab" data-tab="history" onclick="switchTab('history')">History</button>
+        <button class="tab" data-tab="setup" onclick="switchTab('setup')">Setup</button>
+      </div>
+      <div class="chips">
+        <button class="chip on" id="chipAuto" onclick="toggleAuto()">⚡ Auto</button>
+        <button class="chip on" id="chipMic" onclick="toggleMic()">🎙 Mic ON</button>
+        <button class="chip" id="chipModel" title="Click to switch between Cloud (Claude) and Local (Ollama)" onclick="send({type:'toggle_model'});showToast('Switching model…')">⚡ qwen2.5:7b</button>
+      </div>
+    </div>
+
+    <!-- ANSWER TAB -->
+    <div class="view active" id="view-answer">
+      <div class="q-card" id="questionBox">Listening for questions…</div>
+
+      <div class="answer-wrap">
+        <div class="answer-toolbar">
+          <button class="mini-btn" title="Previous Answer" onclick="navHistory(1)">‹</button>
+          <button class="mini-btn" title="Next Answer" onclick="navHistory(-1)">›</button>
+          <button class="mini-btn" onclick="send({type:'refine', kind:'shorter'})">Shorter</button>
+          <button class="mini-btn" onclick="send({type:'refine', kind:'deeper'})">Deeper</button>
+          <button class="mini-btn" onclick="send({type:'refine', kind:'example'})">Example</button>
+          <button class="mini-btn" onclick="send({type:'refine', kind:'simpler'})">Simpler</button>
+          <span class="chip" id="sourceBadge" style="display:none;cursor:default;font-size:10px;padding:2px 8px;"></span>
+          <div class="spacer"></div>
+          <button class="mini-btn" onclick="clearAll()">↺ Clear</button>
+          <button class="mini-btn" onclick="copyAnswer()">📋 Copy</button>
+        </div>
+        <div class="answer-scroll" id="answerScroll">
+          <div class="ans-heading">FROSTED GLASS HUD READY</div>
+          <div class="ans-lead">Windows 11 Acrylic glass active · Hidden from Google Meet &amp; Zoom screen share.</div>
+          <div class="ans-bullet">Speak or play call audio — live captions stream above, answers stream here.</div>
+          <div class="ans-bullet">Press F7 anytime to answer the last 60s · Press F9 for Screen OCR / Vision.</div>
+          <div class="ans-bullet">Press F10 for Click-Through mode · Use Alt + ↑/↓ to scroll without moving mouse.</div>
+        </div>
+      </div>
+
+      <div class="ask-row">
+        <button class="suggest-chip" onclick="quickAsk('Follow up on the previous answer: explain the key trade-offs, why this is preferred, and any limitations.', '↩ Trade-offs')">↩ Trade-offs</button>
+        <button class="suggest-chip" onclick="quickAsk('Follow up on the previous answer: give one concrete real-world example.', '↩ Example')">↩ Example</button>
+        <button class="suggest-chip" onclick="quickAsk('What follow-up question is the interviewer most likely to ask next based on the last answer, and how should I answer it?', '↩ Next Q')">↩ Next Q</button>
+        <input class="ask-input" id="askInput" placeholder="Ask a follow-up about the last answer… (Enter)" onkeydown="if(event.key==='Enter')submitAsk()" />
+      </div>
+    </div>
+
+    <!-- TRANSCRIPT TAB -->
+    <div class="view" id="view-transcript">
+      <div class="list-scroll" id="transcriptList">
+        <div class="msg"><div class="msg-who">System</div>Waiting for call audio…</div>
+      </div>
+    </div>
+
+    <!-- HISTORY TAB -->
+    <div class="view" id="view-history">
+      <div class="list-scroll" id="historyList">
+        <div class="msg"><div class="msg-who">History</div>Answers from this session will appear here.</div>
+      </div>
+    </div>
+
+    <!-- SETUP TAB -->
+    <div class="view" id="view-setup">
+      <div class="setup-scroll">
+        <div class="grid-2">
+          <div class="field">
+            <label>Company / College</label>
+            <input id="suCompany" placeholder="e.g. VIT-AP or Google" />
+          </div>
+          <div class="field">
+            <label>Role / Subject</label>
+            <input id="suRole" placeholder="e.g. GCP ACE Viva / SDE Intern" />
+          </div>
+        </div>
+        <div class="field">
+          <label>Round</label>
+          <select id="suRound">
+            <option>Mixed</option><option>Viva</option><option>HR</option>
+            <option>Technical</option><option>Coding</option><option>Managerial</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Job Description / Course Details</label>
+          <textarea id="suJd" placeholder="Paste JD or viva syllabus topics…"></textarea>
+        </div>
+        <div class="field">
+          <label>Personal Notes</label>
+          <textarea id="suNotes" placeholder="Key projects, branch, CGPA, tech stack…"></textarea>
+        </div>
+        <div class="setup-actions">
+          <button class="btn-primary" onclick="saveSetup()">Save Setup</button>
+          <button class="pill-btn" onclick="pickResume()">📄 Upload Resume</button>
+          <button class="mini-btn" onclick="send({type:'resume_clear'})">Remove Resume</button>
+          <button class="pill-btn" onclick="predictQuestions()">✨ Predict Questions</button>
+          <span id="suStatus" style="font-size:11px;color:var(--good);"></span>
+        </div>
+
+        <div class="field" style="margin-top:6px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <label style="margin:0;">Hybrid Knowledge Base (Stored PDFs / Notes)</label>
+            <button class="pill-btn" style="height:26px;font-size:11px;" onclick="pickDocs()">📚 Upload PDFs / Notes</button>
+          </div>
+          <div id="docsList" style="display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--dim);">
+            <span>No documents uploaded yet. Upload PDFs/notes to enable Hybrid RAG.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span id="footerHints">F6: Auto · F7: Force · F8: Hide · F9: Screen · F10: Click-Thru OFF · F11: Read</span>
+      <span class="toast" id="toast"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+  const params = new URLSearchParams(window.location.search);
+  const wsPort = params.get('port') || '8765';
+  let ws = null;
+  let collapsed = false;
+  let autoMode = true;
+  let micOn = true;
+  let teleprompterOn = false;
+  let teleTimer = null;
+  let rawAnswer = '';
+  let currentQuestion = '';
+  let historyItems = [];
+  let histCursor = -1;
+  let miniPill = false;
+
+  function toggleMiniPill(on) {
+    miniPill = (typeof on === 'boolean') ? on : !miniPill;
+    document.getElementById('shell').classList.toggle('mini', miniPill);
+    window.glassAPI.setMiniPill(miniPill);
+  }
+
+  function navHistory(dir) {
+    if (!historyItems.length) return;
+    const next = Math.max(0, Math.min(historyItems.length - 1, histCursor + dir));
+    histCursor = next;
+    const item = historyItems[histCursor];
+    document.getElementById('questionBox').textContent = `Q: ${item.q}`;
+    rawAnswer = item.a;
+    renderAnswer(item.a);
+    showToast(`Answer ${histCursor + 1}/${historyItems.length}`);
+  }
+
+  function highlightCode(src) {
+    let s = escapeHtml(src);
+    // Comments (# or //)
+    s = s.replace(/(\/\/[^\n]*|#[^\n]*)/g, '<span class="tok-cmt">$1</span>');
+    // Strings
+    s = s.replace(/(&quot;[^&]*?&quot;|'[^']*?')/g, '<span class="tok-str">$1</span>');
+    // Keywords
+    s = s.replace(/\b(def|class|return|if|elif|else|for|while|in|import|from|as|try|except|with|yield|lambda|pass|break|continue|True|False|None|public|private|protected|static|void|int|long|double|float|bool|char|string|const|let|var|function|async|await|new|this|struct|auto|SELECT|FROM|WHERE|JOIN|GROUP|BY|ORDER|INSERT|UPDATE|DELETE|CREATE|TABLE)\b/g, '<span class="tok-kw">$1</span>');
+    // Numbers
+    s = s.replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="tok-num">$1</span>');
+    // Function calls
+    s = s.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\s*(?=\()/g, '<span class="tok-fn">$1</span>');
+    return s;
+  }
+
+  window._codeSnippets = [];
+  function copyCodeBlock(idx) {
+    const txt = window._codeSnippets[idx] || '';
+    if (txt) navigator.clipboard.writeText(txt).then(() => showToast('Code copied ✓'));
+  }
+  const opacities = [1.0, 0.90, 0.78, 0.62];
+  let opIdx = 0;
+
+  const HEADINGS = new Set([
+    'DIRECT ANSWER', 'KEY POINTS', 'APPROACH', 'CODE', 'WHAT THIS SHOWS', 'FIX',
+    'HR QUESTIONS', 'TECHNICAL QUESTIONS', 'PROJECT QUESTIONS', 'THEORY QUESTIONS',
+    'CORE QUESTIONS', 'SCENARIO QUESTIONS'
+  ]);
+
+  function connectWS() {
+    ws = new WebSocket(`ws://127.0.0.1:${wsPort}`);
+    ws.onmessage = (ev) => {
+      try { handleMsg(JSON.parse(ev.data)); } catch (e) {}
+    };
+    ws.onclose = () => setTimeout(connectWS, 1000);
+  }
+  connectWS();
+
+  function send(obj) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(obj));
+    }
+  }
+
+  function showToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 1800);
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function formatInline(s) {
+    let out = escapeHtml(s);
+    // Inline code pills for backticks or GCP/flag tokens like roles/compute.osAdminLogin, enable-oslogin=TRUE
+    out = out.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+    out = out.replace(/\b(roles\/[A-Za-z0-9._-]+|[a-z]+-[a-z0-9-]+=[^\s,.)]+)\b/g, '<code class="inline-code">$1</code>');
+    return out;
+  }
+
+  // Live session timer in top bar
+  const _startTs = Date.now();
+  setInterval(() => {
+    const mins = Math.floor((Date.now() - _startTs) / 60000);
+    const el = document.getElementById('sessionTimer');
+    if (el) el.textContent = `⏱ ${mins}m`;
+  }, 15000);
+
+  let _rafPending = false;
+  function scheduleRender() {
+    if (_rafPending) return;
+    _rafPending = true;
+    requestAnimationFrame(() => {
+      _rafPending = false;
+      renderAnswer(rawAnswer);
+    });
+  }
+
+  function _looksLikeCodeLine(line) {
+    const t = line.trim();
+    if (!t) return false;
+    return /^(public |private |protected |static |class |def |function |const |let |var |int |long |void |return |for\s*\(|while\s*\(|if\s*\(|#include|import |from .+ import|SELECT |CREATE |kubectl |gcloud |System\.out|console\.log|print\(|[\{\}\[\]];?$)/.test(t)
+      || (line.startsWith('    ') && /[;\{\}\(\)=]/.test(t));
+  }
+
+  function renderAnswer(text) {
+    const el = document.getElementById('answerScroll');
+    // Ensure inline "• " bullets always break onto their own clean lines (outside code)
+    const lines = text.split('\n');
+    let html = '';
+    let inFence = false;
+    let inHeadingCode = false;
+    let inAutoCode = false;
+    let codeBuf = [];
+    let afterLeadHead = false;
+
+    window._codeSnippets = [];
+    const flushCode = () => {
+      if (codeBuf.length) {
+        const rawCode = codeBuf.join('\n').replace(/^\n+|\n+$/g, '');
+        if (rawCode) {
+          const idx = window._codeSnippets.length;
+          window._codeSnippets.push(rawCode);
+          html += `<div class="ans-code-wrap"><button class="code-copy" onclick="copyCodeBlock(${idx})">📋 Copy</button><pre class="ans-code">${highlightCode(rawCode)}</pre></div>`;
+        }
+        codeBuf = [];
+      }
+      inAutoCode = false;
+    };
+
+    for (const rawLine of lines) {
+      const trimmed = rawLine.trim();
+      const upper = trimmed.replace(/:$/, '').toUpperCase();
+
+      if (trimmed.startsWith('```')) {
+        if (inFence) { flushCode(); inFence = false; }
+        else { flushCode(); inFence = true; inHeadingCode = false; }
+        continue;
+      }
+
+      if (inFence) {
+        codeBuf.push(rawLine);
+        continue;
+      }
+
+      if (HEADINGS.has(upper)) {
+        flushCode();
+        inHeadingCode = (upper === 'CODE' || upper === 'FIX');
+        afterLeadHead = (upper === 'DIRECT ANSWER' || upper === 'WHAT THIS SHOWS' || upper === 'APPROACH');
+        html += `<div class="ans-heading">${escapeHtml(upper)}</div>`;
+        continue;
+      }
+
+      if (inHeadingCode) {
+        if (trimmed.startsWith('•')) {
+          flushCode();
+          inHeadingCode = false;
+        } else {
+          codeBuf.push(rawLine);
+          continue;
+        }
+      }
+
+      // Auto-detect unfenced code blocks (e.g. raw Java/Python/C++ snippets)
+      if (!inAutoCode && _looksLikeCodeLine(rawLine)) {
+        inAutoCode = true;
+        codeBuf.push(rawLine);
+        continue;
+      }
+      if (inAutoCode) {
+        if (!trimmed || _looksLikeCodeLine(rawLine) || rawLine.startsWith('  ') || /^[\}\)\];]+$/.test(trimmed)) {
+          codeBuf.push(rawLine);
+          continue;
+        } else {
+          flushCode();
+        }
+      }
+
+      if (!trimmed) continue;
+
+      // Split any inline "• " bullets cleanly onto separate lines
+      const subLines = trimmed.replace(/([^\n])\s*•\s+/g, '$1\n• ').split('\n');
+      for (const sub of subLines) {
+        const st = sub.trim();
+        if (!st) continue;
+        if (st.startsWith('•') || st.startsWith('- ')) {
+          afterLeadHead = false;
+          const body = st.replace(/^[•\-]\s*/, '');
+          html += `<div class="ans-bullet">${formatInline(body)}</div>`;
+        } else if (afterLeadHead) {
+          html += `<div class="ans-lead">${formatInline(st)}</div>`;
+          afterLeadHead = false;
+        } else {
+          html += `<div class="ans-p">${formatInline(st)}</div>`;
+        }
+      }
+    }
+    flushCode();
+    el.innerHTML = html || '<div class="ans-p" style="color:var(--faint);">Thinking…</div>';
+    if (!teleprompterOn) {
+      el.scrollTop = el.scrollHeight;
+    }
+    autoFitHeight();
+  }
+
+  let _fitTimer = null;
+  function autoFitHeight() {
+    if (collapsed) return;
+    if (_fitTimer) return;
+    _fitTimer = setTimeout(() => {
+      _fitTimer = null;
+      const el = document.getElementById('answerScroll');
+      if (!el) return;
+      // Pill(52) + Tabs(34) + Question(44) + Toolbar(32) + Ask(34) + Footer(24) + padding(40) = ~260px chrome
+      const desired = 260 + Math.min(el.scrollHeight + 16, 460);
+      window.glassAPI.fitHeight(desired);
+    }, 90);
+  }
+
+  function handleMsg(m) {
+    switch (m.type) {
+      case 'status': {
+        const clean = (m.text || '').replace(/^[^\w]+/, '').trim() || 'LISTENING';
+        const col = m.color || '#4ECCA3';
+        document.getElementById('statusText').textContent = clean;
+        document.getElementById('statusText').style.color = col;
+        const dot = document.getElementById('statusDot');
+        dot.style.background = col;
+        dot.style.boxShadow = `0 0 10px ${col}`;
+        break;
+      }
+      case 'meta': {
+        const v = m.vision ? ` · 👁` : '';
+        const d = m.docs ? ` · 📄 ${m.docs}` : '';
+        document.getElementById('chipModel').textContent = `⚡ ${m.model}${v}${d}`;
+        break;
+      }
+      case 'level': {
+        const lvl = Math.min(1, (m.rms || 0) / 1600);
+        const bars = document.querySelectorAll('#wave span');
+        const weights = [0.55, 0.85, 1.0, 0.8, 0.5];
+        bars.forEach((b, i) => {
+          const h = Math.max(3, Math.round(3 + lvl * 14 * weights[i]));
+          b.style.height = `${h}px`;
+        });
+        break;
+      }
+      case 'live_caption': {
+        document.getElementById('questionBox').textContent = `🎙️ ${m.text}`;
+        break;
+      }
+      case 'start_stream': {
+        if (miniPill) toggleMiniPill(false);
+        if (collapsed) toggleCollapse();
+        histCursor = -1;
+        if (currentQuestion && rawAnswer.trim()) {
+          addHistory(currentQuestion, rawAnswer);
+        }
+        currentQuestion = m.question || '';
+        rawAnswer = '';
+        document.getElementById('questionBox').textContent = `Q: ${currentQuestion}`;
+        document.getElementById('answerScroll').innerHTML = '';
+        switchTab('answer');
+        break;
+      }
+      case 'token': {
+        rawAnswer += m.token || '';
+        scheduleRender();
+        break;
+      }
+      case 'cues': {
+        rawAnswer = m.text || '';
+        renderAnswer(rawAnswer);
+        break;
+      }
+      case 'transcript': {
+        const list = document.getElementById('transcriptList');
+        if (list.children.length === 1 && list.children[0].textContent.includes('Waiting for call')) {
+          list.innerHTML = '';
+        }
+        const div = document.createElement('div');
+        div.className = 'msg' + (m.speaker === 'You' ? ' you' : '');
+        div.innerHTML = `<div class="msg-who">${escapeHtml(m.speaker || 'Interviewer')}</div>${escapeHtml(m.text || '')}`;
+        list.appendChild(div);
+        list.scrollTop = list.scrollHeight;
+        break;
+      }
+      case 'profile': {
+        const p = m.profile || {};
+        document.getElementById('suCompany').value = p.company || '';
+        document.getElementById('suRole').value = p.role || '';
+        document.getElementById('suRound').value = p.round || 'Mixed';
+        document.getElementById('suJd').value = p.jd || '';
+        document.getElementById('suNotes').value = p.notes || '';
+        if (p.resume_name) {
+          document.getElementById('suStatus').textContent = `Resume: ${p.resume_name}`;
+        }
+        break;
+      }
+      case 'setup_status': {
+        document.getElementById('suStatus').textContent = m.text || '';
+        break;
+      }
+      case 'docs': {
+        renderDocs(m.docs || []);
+        break;
+      }
+      case 'sources': {
+        const badge = document.getElementById('sourceBadge');
+        const srcs = m.sources || [];
+        if (srcs.length) {
+          badge.style.display = 'inline-flex';
+          badge.className = 'chip on';
+          badge.textContent = `📄 Found in: ${srcs.join(', ')}`;
+        } else if (rawAnswer.trim()) {
+          badge.style.display = 'inline-flex';
+          badge.className = 'chip';
+          badge.textContent = '🌐 General AI';
+        } else {
+          badge.style.display = 'none';
+        }
+        break;
+      }
+    }
+  }
+
+  function renderDocs(docs) {
+    const list = document.getElementById('docsList');
+    if (!docs.length) {
+      list.innerHTML = '<span>No documents uploaded yet. Upload PDFs/notes to enable Hybrid RAG.</span>';
+      return;
+    }
+    list.innerHTML = '';
+    docs.forEach((d) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:5px 8px;border-radius:7px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);';
+      row.innerHTML = `<span>📄 ${escapeHtml(d.name)} <span style="color:var(--faint);">(${d.size_kb} KB)</span></span>`;
+      const btn = document.createElement('button');
+      btn.className = 'mini-btn';
+      btn.textContent = '✕ Delete';
+      btn.onclick = () => send({ type: 'docs_delete', name: d.name });
+      row.appendChild(btn);
+      list.appendChild(row);
+    });
+  }
+
+  function clearAll() {
+    rawAnswer = '';
+    currentQuestion = '';
+    document.getElementById('questionBox').textContent = 'Listening for questions…';
+    document.getElementById('answerScroll').innerHTML =
+      '<div class="ans-p" style="color:var(--faint);">Cleared — ready for the next question.</div>';
+    document.getElementById('sourceBadge').style.display = 'none';
+    send({ type: 'clear_memory' });
+    window.glassAPI.fitHeight(250);
+    showToast('Cleared ✓');
+  }
+
+  async function pickDocs() {
+    const paths = await window.glassAPI.pickDocs();
+    if (paths && paths.length) {
+      send({ type: 'docs_add', paths });
+      showToast(`Uploaded ${paths.length} file(s) ✓`);
+    }
+  }
+
+  function addHistory(q, a) {
+    historyItems.unshift({ q, a });
+    const list = document.getElementById('historyList');
+    list.innerHTML = '';
+    historyItems.slice(0, 30).forEach((item) => {
+      const div = document.createElement('div');
+      div.className = 'msg hist-item';
+      div.innerHTML = `<div class="msg-who">${escapeHtml(item.q.slice(0, 90))}</div>${escapeHtml(item.a.slice(0, 140))}…`;
+      div.onclick = () => {
+        document.getElementById('questionBox').textContent = `Q: ${item.q}`;
+        rawAnswer = item.a;
+        renderAnswer(item.a);
+        switchTab('answer');
+      };
+      list.appendChild(div);
+    });
+  }
+
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${name}`));
+  }
+
+  function toggleCollapse() {
+    collapsed = !collapsed;
+    document.getElementById('shell').classList.toggle('collapsed', collapsed);
+    document.getElementById('btnCollapse').textContent = collapsed ? '▾' : '▴';
+    window.glassAPI.setCollapsed(collapsed);
+  }
+
+  function cycleOpacity() {
+    opIdx = (opIdx + 1) % opacities.length;
+    window.glassAPI.setOpacity(opacities[opIdx]);
+    showToast(`Opacity ${Math.round(opacities[opIdx] * 100)}%`);
+  }
+
+  function toggleAuto() {
+    autoMode = !autoMode;
+    const el = document.getElementById('chipAuto');
+    el.textContent = autoMode ? '⚡ Auto' : '✋ Manual';
+    el.className = 'chip ' + (autoMode ? 'on' : 'warn');
+    send({ type: 'mode_change', auto: autoMode });
+  }
+
+  function toggleMic() {
+    micOn = !micOn;
+    const el = document.getElementById('chipMic');
+    el.textContent = micOn ? '🎙 Mic ON' : '🔇 Mic OFF';
+    el.className = 'chip ' + (micOn ? 'on' : 'warn');
+    send({ type: 'mic_toggle', on: micOn });
+  }
+
+  function toggleTeleprompter() {
+    teleprompterOn = !teleprompterOn;
+    document.getElementById('btnRead').classList.toggle('active', teleprompterOn);
+    if (teleTimer) { clearInterval(teleTimer); teleTimer = null; }
+    if (teleprompterOn) {
+      const el = document.getElementById('answerScroll');
+      el.scrollTop = 0;
+      teleTimer = setInterval(() => { el.scrollTop += 1; }, 45);
+      showToast('Teleprompter ON');
+    } else {
+      showToast('Teleprompter OFF');
+    }
+  }
+
+  function copyAnswer() {
+    if (!rawAnswer) return;
+    navigator.clipboard.writeText(rawAnswer).then(() => showToast('Copied ✓'));
+  }
+
+  function quickAsk(prompt, label) {
+    send({ type: 'ask', prompt, label });
+  }
+
+  function submitAsk() {
+    const inp = document.getElementById('askInput');
+    const txt = inp.value.trim();
+    if (!txt) return;
+    inp.value = '';
+    send({ type: 'ask', prompt: txt, label: txt });
+  }
+
+  function saveSetup() {
+    send({
+      type: 'profile_save',
+      fields: {
+        company: document.getElementById('suCompany').value,
+        role: document.getElementById('suRole').value,
+        round: document.getElementById('suRound').value,
+        jd: document.getElementById('suJd').value,
+        notes: document.getElementById('suNotes').value,
+      }
+    });
+  }
+
+  async function pickResume() {
+    const path = await window.glassAPI.pickResume();
+    if (path) send({ type: 'resume_pick', path });
+  }
+
+  function predictQuestions() {
+    saveSetup();
+    switchTab('answer');
+    send({ type: 'predict' });
+  }
+
+  function closeAll() {
+    send({ type: 'quit' });
+    window.glassAPI.closeApp();
+  }
+
+  // Global hotkeys from Electron main process
+  window.glassAPI.onHotkey((data) => {
+    if (data.action === 'toggle_auto') toggleAuto();
+    else if (data.action === 'force_answer') send({ type: 'force_answer' });
+    else if (data.action === 'screen_ocr') send({ type: 'screen_ocr' });
+    else if (data.action === 'region_capture') send({ type: 'screen_ocr' });
+    else if (data.action === 'toggle_teleprompter') toggleTeleprompter();
+    else if (data.action === 'scroll') {
+      const el = document.getElementById('answerScroll');
+      if (el) el.scrollBy({ top: data.delta || 120, behavior: 'smooth' });
+    }
+    else if (data.action === 'click_through_state') {
+      document.getElementById('footerHints').textContent =
+        `F6: Auto · F7: Force · F8: Hide · F9: Screen · F10: Click-Thru ${data.on ? 'ON' : 'OFF'} · F11: Read`;
+      showToast(data.on ? 'Click-Through ON' : 'Click-Through OFF');
+    }
+  });
+</script>
+</body>
+</html>
