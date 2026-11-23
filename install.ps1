@@ -61,7 +61,7 @@ if (-not (Test-Path $SettingsFile) -and (Test-Path $ExampleFile)) {
 # 4. Install Python dependencies
 Write-Host ">> Installing Python packages (this takes ~1-2 mins)..." -ForegroundColor Cyan
 python -m pip install --upgrade pip --quiet
-python -m pip install --upgrade pyaudiowpatch faster-whisper customtkinter numpy scipy pillow rapidocr-onnxruntime pymupdf python-docx websockets requests pycaw
+python -m pip install --upgrade pyaudiowpatch faster-whisper customtkinter numpy scipy pillow rapidocr-onnxruntime pymupdf python-docx websockets requests pycaw nvidia-cublas-cu12 nvidia-cudnn-cu12
 
 # 5. Install Electron Frosted-Glass UI runtime
 $GlassDir = Join-Path $InstallDir "glass_ui"

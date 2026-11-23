@@ -372,7 +372,10 @@ class CueCopilotApp:
 
         self.hud.set_status("⏳ LOADING WHISPER...", "#60A5FA")
         last_err = None
+        cuda_broken = False
         for name, device, ctype in WHISPER_CANDIDATES:
+            if device == "cuda" and cuda_broken:
+                continue
             try:
                 model = WhisperModel(name, device=device, compute_type=ctype, cpu_threads=6)
                 # force a tiny run so a missing CUDA library fails here, not mid-interview
@@ -382,7 +385,9 @@ class CueCopilotApp:
                 return model
             except Exception as e:
                 last_err = e
-                print(f"[Whisper] {name} failed: {e}")
+                print(f"[Whisper] {name} ({device}) failed: {e}")
+                if device == "cuda":
+                    cuda_broken = True
         raise last_err
 
     def _warmup_ollama(self):
