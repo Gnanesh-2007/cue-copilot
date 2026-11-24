@@ -50,6 +50,7 @@ class GlassHUD:
         on_docs_add=None,
         on_docs_delete=None,
         on_toggle_model=None,
+        on_select_model=None,
     ):
         self.on_force_answer = on_force_answer
         self.on_screen_ocr = on_screen_ocr
@@ -66,6 +67,7 @@ class GlassHUD:
         self.on_docs_add = on_docs_add
         self.on_docs_delete = on_docs_delete
         self.on_toggle_model = on_toggle_model
+        self.on_select_model = on_select_model
 
         self.mic_on = True
         self.port = _pick_free_port(8765)
@@ -86,8 +88,8 @@ class GlassHUD:
 
         async def handler(ws):
             self._clients.add(ws)
-            # Replay initial metadata/profile/status/docs so UI starts populated
-            for key in ("meta", "profile", "status", "docs"):
+            # Replay initial metadata/profile/status/docs/models so UI starts populated
+            for key in ("meta", "profile", "status", "docs", "models"):
                 if key in self._init_state:
                     try:
                         await ws.send(json.dumps(self._init_state[key]))
@@ -149,6 +151,8 @@ class GlassHUD:
             run(self.on_docs_delete, msg.get("name", ""))
         elif t == "toggle_model":
             run(self.on_toggle_model)
+        elif t == "select_model":
+            run(self.on_select_model, msg.get("model_id", ""))
         elif t == "quit":
             self._running = False
 
@@ -217,6 +221,11 @@ class GlassHUD:
 
     def set_sources(self, sources: list[str]):
         self._emit({"type": "sources", "sources": sources})
+
+    def set_models(self, models: list[dict], active_id: str):
+        msg = {"type": "models", "models": models, "active_id": active_id}
+        self._init_state["models"] = msg
+        self._emit(msg)
 
     def mainloop(self):
         """Launches Electron Frosted-Glass HUD and blocks until the user closes it."""

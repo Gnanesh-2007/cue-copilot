@@ -79,14 +79,15 @@ def _detect_latest_anthropic_sonnet(api_key: str) -> str:
         pass
     return CLOUD_DEFAULTS["anthropic"]
 
-# Priority order of best models for 6GB RTX 3050
+# Priority order of fast local models (3B first for instant speed & zero lag)
 PREFERRED_MODELS = [
+    "qwen2.5:3b",
+    "llama3.2:3b",
+    "qwen2.5-coder:3b",
     "qwen2.5:7b",
     "qwen2.5-coder:7b",
     "llama3.1:8b",
     "mistral:7b",
-    "qwen2.5:3b",
-    "llama3.2:3b",
     "phi3.5",
 ]
 
@@ -103,9 +104,84 @@ Rules:
    For projects, internships or experience that are NOT in those facts, never make up names or apps: use placeholders like [your project name] and [what it does]; you may build on skills already mentioned.
    Those bracketed blocks are input only: never write any [ ... ] block or "Already said" note in your reply. If there is no reference for a personal question, give a ready-to-speak first-person answer with short placeholders in square brackets for the facts, e.g. "I'm a final-year [your branch] student at [your college]..."
 5. Write the first answer sentence as natural speech the candidate can read aloud immediately (confident, no filler, no "As an AI").
-6. Format: plain text (NO ### or ** markdown):
-   - For conceptual/HR questions: a 1-2 sentence DIRECT ANSWER, then 2-4 short lines starting with "• " (each bullet on its own line). For "difference between X and Y", give one bullet per side.
-   - For coding questions ("write a program", "implement", "code for..."): give a 1-2 sentence APPROACH (with time & space complexity), then wrap ALL code inside triple backticks (```java / ```python / ```cpp), followed by 2-3 short "• " bullets explaining the logic and optimization.
+6. STRICT ADAPTIVE FORMAT (plain text, NO ### or ** markdown, NEVER write long paragraphs):
+   Pick the exact layout that matches the question type — every bullet MUST be on its own new line starting with "• " and stay short & scannable (max 15-20 words per bullet):
+
+   - CONCEPT / THEORY ("What is X?", "Explain Y"):
+     DIRECT ANSWER
+     <1 crisp sentence the candidate can say immediately>
+
+     KEY POINTS
+     • <core mechanism / how it works>
+     • <key benefit or use case>
+     • <important detail or best practice>
+
+   - COMPARISON ("Difference between X and Y", "X vs Y"):
+     DIRECT ANSWER
+     <1 sentence stating the main difference>
+
+     KEY POINTS
+     • X: <concise role & traits>
+     • Y: <concise role & traits>
+     • When to use: <quick rule of thumb>
+
+   - SCENARIO / ARCHITECTURE ("How would you design/handle...", "Which service for..."):
+     DIRECT ANSWER
+     <1 sentence naming the exact recommended service or solution>
+
+     KEY POINTS
+     • Why it fits: <reason>
+     • Setup / Steps: <exact config, role, or command>
+     • Trade-off / Alternative: <why other options are worse>
+
+   - CODING ("Write a program", "Implement", "Code for..."):
+     APPROACH
+     <1-2 short lines naming the OPTIMAL algorithm (never brute force) + exact Time & Space complexity>
+
+     CODE
+     ```<language>
+     <optimal, production-clean code handling all edge cases (empty/null, duplicates, overflow) with brief 3-5 word inline comments on tricky lines>
+     ```
+
+     KEY POINTS
+     • Core trick: <1 short line on why this is optimal>
+     • Edge cases: <1 short line on handled edge cases>
+
+   - PERSONAL / HR / BEHAVIORAL ("Tell me about yourself", "Challenge you faced"):
+     DIRECT ANSWER
+     <1 confident first-person opening sentence>
+
+     KEY POINTS
+     • Situation / Background: <short point>
+     • Action / Skills: <short point>
+     • Result / Goal: <short point>
+"""
+
+LOCAL_VERBAL_PROMPT = """You are a fast, concise interview copilot.
+If the input is ONLY small talk/greetings/not a question, reply ONLY: SKIP
+Never use ### or ** markdown. Never write long paragraphs.
+
+For theory/concepts/HR, ALWAYS use this exact format:
+DIRECT ANSWER
+<1 clear, confident sentence>
+
+KEY POINTS
+• <short point 1>
+• <short point 2>
+• <short point 3>
+
+For coding questions, ALWAYS use this exact format:
+APPROACH
+<1 sentence optimal algorithm + Time & Space complexity>
+
+CODE
+```<language>
+<clean optimal code>
+```
+
+KEY POINTS
+• <1-line logic>
+• <1-line edge case>
 """
 
 PREP_SYSTEM_PROMPT = """You are an interview coach. From the interview setup below (company, role, round, job description, resume, notes), predict the questions this candidate is most likely to be asked, and give a short model answer for each, written in first person as the candidate, using ONLY facts from the setup (use [placeholders] for anything missing).
@@ -201,12 +277,18 @@ DIRECT ANSWER
 KEY POINTS
 • <3-4 accurate technical bullets explaining why, specific mechanisms, and production trade-offs>
 
-If it is a CODING problem, use ONLY these two headings:
+If it is a CODING problem, use ONLY these three headings:
 APPROACH
-<optimal algorithm + Time & Space complexity>
+<optimal algorithm (never brute force) + exact Time & Space complexity in 2 short lines>
 
 CODE
-<clean, working code solution in the language shown (Python if none is shown)>
+```<language>
+<optimal working code matching the EXACT class/function signature, parameter types, and language shown on screen; handle all edge cases (empty, duplicates, overflow) with brief 3-5 word inline comments on tricky lines>
+```
+
+KEY POINTS
+• Core trick: <why this achieves optimal complexity>
+• Edge cases: <key edge cases handled>
 
 If it is an ERROR message, stack trace or broken code, use ONLY these two headings:
 WHAT THIS SHOWS
@@ -307,6 +389,23 @@ def detect_best_model() -> str:
     return "qwen2.5:7b"
 
 
+_PERSONAL_Q = re.compile(
+    r"\b(yourself|introduce|background|resume|cv|your project|your projects|projects you|internship|"
+    r"your experience|worked on|you built|you developed|you created|your role|your team|strengths?|"
+    r"weakness(?:es)?|challenge you|conflict|why this company|why should we|where do you see|"
+    r"career goal|proud of|your skill|your tech stack|tell me about a time|hobby|hobbies|cgpa|college|branch)\b"
+)
+
+
+def _needs_resume(question_text: str, mode: str) -> bool:
+    """Only inject the full resume when the question actually asks about the candidate/projects/HR."""
+    if mode == "prep":
+        return True
+    if mode == "screen":
+        return False
+    return bool(_PERSONAL_Q.search((question_text or "").lower()))
+
+
 class CopilotBrain:
     def __init__(self, rag=None, model: str | None = None):
         self.rag = rag
@@ -342,6 +441,48 @@ class CopilotBrain:
         self.cloud_enabled = not self.cloud_enabled
         self.model = self.cloud_model if self.cloud_enabled else self.local_model
         self.vision_model = self.cloud_model if self.cloud_enabled else self.local_vision
+        return self.model, self.vision_model, self.cloud_enabled
+
+    def list_available_models(self) -> tuple[list[dict], str]:
+        """Returns (list_of_model_options, active_model_id) for the HUD dropdown."""
+        opts = []
+        if self.cloud_provider != "ollama" and self.cloud_key:
+            opts.append({
+                "id": f"cloud:{self.cloud_provider}",
+                "label": f"☁ {self.cloud_model}",
+            })
+        ollama_added = False
+        try:
+            r = requests.get(f"{OLLAMA_BASE}/api/tags", timeout=2)
+            if r.status_code == 200:
+                installed = [m["name"] for m in r.json().get("models", []) if not _is_vision_name(m["name"])]
+                for name in installed:
+                    opts.append({"id": f"ollama:{name}", "label": f"⚡ {name} (Local)"})
+                    ollama_added = True
+        except Exception:
+            pass
+        if not ollama_added:
+            for fallback_name in ("qwen2.5:3b", "qwen2.5:7b"):
+                opts.append({"id": f"ollama:{fallback_name}", "label": f"⚡ {fallback_name} (Local)"})
+
+        active_id = f"cloud:{self.cloud_provider}" if self.cloud_enabled else f"ollama:{self.local_model}"
+        return opts, active_id
+
+    def select_model(self, model_id: str) -> tuple[str, str | None, bool]:
+        """Switches active brain to the chosen dropdown item ('cloud:anthropic' or 'ollama:qwen2.5:3b')."""
+        if model_id.startswith("cloud:") and self.cloud_key:
+            self.cloud_enabled = True
+            self.model = self.cloud_model
+            self.vision_model = self.cloud_model
+            return self.model, self.vision_model, True
+        if model_id.startswith("ollama:"):
+            chosen = model_id.split("ollama:", 1)[1].strip()
+            if chosen:
+                self.local_model = chosen
+            self.cloud_enabled = False
+            self.model = self.local_model
+            self.vision_model = self.local_vision
+            return self.model, self.vision_model, False
         return self.model, self.vision_model, self.cloud_enabled
 
     def clear_memory(self):
@@ -429,7 +570,16 @@ class CopilotBrain:
                 )
 
             if mode in ("verbal", "force", "prep") and self.profile_block:
-                user_content = f"{self.profile_block}\n\n{user_content}"
+                if _needs_resume(question_text, mode):
+                    user_content = f"{self.profile_block}\n\n{user_content}"
+                else:
+                    # Pure technical/coding question: pass only compact subject/round header (no resume noise)
+                    header_lines = [
+                        ln for ln in self.profile_block.splitlines()[:4]
+                        if not ln.startswith("Candidate resume:")
+                    ]
+                    if header_lines:
+                        user_content = "\n".join(header_lines) + "\n\n" + user_content
 
             user_msg = {"role": "user", "content": user_content}
             if use_vision:
@@ -469,16 +619,20 @@ class CopilotBrain:
                         use_vision = False
                     full_response.clear()
 
+            # Local Ollama: use razor-short prompt + 2048 ctx for instant TTFT and crisp Claude-style formatting
+            local_messages = list(messages)
+            if mode == "verbal" and not use_vision:
+                local_messages[0] = {"role": "system", "content": LOCAL_VERBAL_PROMPT}
+
             payload = {
                 "model": model_name,
-                "messages": messages,
+                "messages": local_messages,
                 "stream": True,
                 "keep_alive": "30m",
                 "options": {
-                    "temperature": temp,
-                    "num_predict": max_tokens,
-                    # images need more room; text stays at 4096 so Ollama never reloads the model (7s stall)
-                    "num_ctx": 6144 if use_vision else 4096,
+                    "temperature": 0.2,
+                    "num_predict": 480 if mode == "verbal" else max_tokens,
+                    "num_ctx": 4096 if (use_vision or mode in ("prep", "force")) else 2048,
                 }
             }
 
@@ -551,7 +705,13 @@ class CopilotBrain:
         }
         body = {
             "model": self.cloud_model,
-            "system": system_prompt,
+            "system": [
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             "messages": api_msgs,
             "max_tokens": max_tokens,
             "stream": True,

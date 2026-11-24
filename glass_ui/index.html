@@ -241,6 +241,23 @@
   .chip.on { color: var(--good); border-color: rgba(78, 204, 163, 0.35); }
   .chip.warn { color: var(--warn); border-color: rgba(251, 191, 36, 0.35); }
 
+  .model-select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 3px 22px 3px 9px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='%23CBD5EB'%3E%3Cpath d='M0 0l5 6 5-6z'/%3E%3C/svg%3E") no-repeat right 8px center;
+    border: 1px solid rgba(125, 166, 255, 0.32);
+    color: #E8F0FF;
+    font-family: inherit;
+    font-size: 10.5px;
+    font-weight: 700;
+    outline: none;
+    max-width: 195px;
+  }
+  .model-select:hover { background-color: rgba(255, 255, 255, 0.14); border-color: var(--accent); }
+  .model-select option { background: #121622; color: #F2F5FC; font-weight: 600; }
+
   /* Tab panels */
   .view { display: none; flex: 1; flex-direction: column; min-height: 0; gap: 8px; }
   .view.active { display: flex; }
@@ -602,7 +619,9 @@
       <div class="chips">
         <button class="chip on" id="chipAuto" onclick="toggleAuto()">⚡ Auto</button>
         <button class="chip on" id="chipMic" onclick="toggleMic()">🎙 Mic ON</button>
-        <button class="chip" id="chipModel" title="Click to switch between Cloud (Claude) and Local (Ollama)" onclick="send({type:'toggle_model'});showToast('Switching model…')">⚡ qwen2.5:7b</button>
+        <select class="model-select" id="modelSelect" onchange="onModelChange(this.value)">
+          <option value="">⚡ Loading models…</option>
+        </select>
       </div>
     </div>
 
@@ -955,9 +974,24 @@
         break;
       }
       case 'meta': {
-        const v = m.vision ? ` · 👁` : '';
-        const d = m.docs ? ` · 📄 ${m.docs}` : '';
-        document.getElementById('chipModel').textContent = `⚡ ${m.model}${v}${d}`;
+        const sel = document.getElementById('modelSelect');
+        if (sel && sel.options.length === 1 && !sel.options[0].value) {
+          sel.options[0].textContent = `⚡ ${m.model}`;
+        }
+        break;
+      }
+      case 'models': {
+        const sel = document.getElementById('modelSelect');
+        if (!sel) break;
+        const models = m.models || [];
+        sel.innerHTML = '';
+        models.forEach((opt) => {
+          const o = document.createElement('option');
+          o.value = opt.id;
+          o.textContent = opt.label;
+          if (opt.id === m.active_id) o.selected = true;
+          sel.appendChild(o);
+        });
         break;
       }
       case 'level': {
@@ -1067,6 +1101,13 @@
       row.appendChild(btn);
       list.appendChild(row);
     });
+  }
+
+  function onModelChange(modelId) {
+    if (!modelId) return;
+    send({ type: 'select_model', model_id: modelId });
+    const label = modelId.startsWith('cloud:') ? 'Claude Cloud' : modelId.replace('ollama:', '');
+    showToast(`Switched to ${label} ✓`);
   }
 
   function clearAll() {

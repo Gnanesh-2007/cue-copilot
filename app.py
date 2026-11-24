@@ -140,6 +140,7 @@ class CueCopilotApp:
             hud_kwargs["on_docs_add"] = self.add_docs
             hud_kwargs["on_docs_delete"] = self.delete_doc
             hud_kwargs["on_toggle_model"] = self.toggle_model
+            hud_kwargs["on_select_model"] = self.select_model
         self.hud = hud_cls(**hud_kwargs)
         # Interview setup (resume, job description, company, round) from the HUD's Setup tab
         self.profile = profile_store.load_profile()
@@ -147,6 +148,9 @@ class CueCopilotApp:
         self.hud.set_profile(self.profile)
         if hasattr(self.hud, "set_docs") and hasattr(self.rag, "list_files"):
             self.hud.set_docs(self.rag.list_files())
+        if hasattr(self.hud, "set_models") and hasattr(self.brain, "list_available_models"):
+            opts, active_id = self.brain.list_available_models()
+            self.hud.set_models(opts, active_id)
         self.mic_enabled = self.hud.mic_on
         self.transcript_lines = deque(maxlen=30)   # what the interviewer said, for the Ask box
         self.heard_log = deque(maxlen=80)          # (time, speaker, text) for F7 "answer the last minute"
@@ -212,6 +216,17 @@ class CueCopilotApp:
         if not is_cloud:
             threading.Thread(target=self._warmup_ollama, daemon=True).start()
         print(f"[Brain] Switched to {'Cloud' if is_cloud else 'Local'}: {model}")
+
+    def select_model(self, model_id: str):
+        """Dropdown selector: switches to any installed Ollama model (3b/7b/etc.) or Frontier Cloud."""
+        model, vision, is_cloud = self.brain.select_model(model_id)
+        self.hud.set_meta(model, self.rag.file_count, vision)
+        if hasattr(self.hud, "set_models"):
+            opts, active_id = self.brain.list_available_models()
+            self.hud.set_models(opts, active_id)
+        if not is_cloud:
+            threading.Thread(target=self._warmup_ollama, daemon=True).start()
+        print(f"[Brain] Dropdown selected {'Cloud' if is_cloud else 'Local'}: {model}")
 
     REFINE_PROMPTS = {
         "shorter": "Answer again in at most 2 short sentences, no bullets.",
@@ -372,10 +387,7 @@ class CueCopilotApp:
 
         self.hud.set_status("⏳ LOADING WHISPER...", "#60A5FA")
         last_err = None
-        cuda_broken = False
         for name, device, ctype in WHISPER_CANDIDATES:
-            if device == "cuda" and cuda_broken:
-                continue
             try:
                 model = WhisperModel(name, device=device, compute_type=ctype, cpu_threads=6)
                 # force a tiny run so a missing CUDA library fails here, not mid-interview
@@ -385,9 +397,7 @@ class CueCopilotApp:
                 return model
             except Exception as e:
                 last_err = e
-                print(f"[Whisper] {name} ({device}) failed: {e}")
-                if device == "cuda":
-                    cuda_broken = True
+                print(f"[Whisper] {name} failed: {e}")
         raise last_err
 
     def _warmup_ollama(self):
@@ -404,7 +414,7 @@ class CueCopilotApp:
                     "prompt": "hi",
                     "stream": False,
                     "keep_alive": "30m",
-                    "options": {"num_predict": 1, "num_ctx": 4096},
+                    "options": {"num_predict": 1, "num_ctx": 2048},
                 },
                 timeout=15,
             )
@@ -461,19 +471,26 @@ class CueCopilotApp:
         segments, _ = self.whisper_model.transcribe(
             samples,
             language="en",
+            task="transcribe",
             beam_size=beam_size,
             initial_prompt=tech_prompt,
             condition_on_previous_text=False,
             vad_filter=vad,
-            vad_parameters=dict(min_silence_duration_ms=300) if vad else None,
+            vad_parameters=dict(min_silence_duration_ms=350) if vad else None,
             without_timestamps=True,
             temperature=0.0,
+            no_speech_threshold=0.5,
+            log_prob_threshold=-0.65,
+            compression_ratio_threshold=2.2,
         )
         parts = []
         for s in segments:
-            if s.no_speech_prob > 0.6 and s.avg_logprob < -0.8:   # music / noise, not words
+            # Drop non-English / garbled / low-confidence / repetitive hallucinations
+            if s.no_speech_prob > 0.45 or s.avg_logprob < -0.65 or s.compression_ratio > 2.2:
                 continue
-            parts.append(s.text)
+            cleaned = re.sub(r"[^\x20-\x7E]", "", s.text).strip()
+            if cleaned:
+                parts.append(cleaned)
         return " ".join(parts).strip()
 
     @staticmethod
@@ -482,7 +499,7 @@ class CueCopilotApp:
         or starts repeating itself with a summary section after the CODE section."""
         full, sent = "", 0                 # text received / text already shown
         primary = ("DIRECT ANSWER", "WHAT THIS SHOWS", "APPROACH")
-        after_code = ("KEY POINTS", "DIRECT ANSWER", "Direct answer", "Summary", "Explanation", "WHAT THIS SHOWS")
+        after_code = ("DIRECT ANSWER", "Direct answer", "Summary", "Explanation", "WHAT THIS SHOWS")
         echo = ("[Already", "[What the candidate", "[Recent conversation", "[Candidate Project")
         watch = primary + after_code + echo + tuple(SECTION_HEADS)
 
@@ -657,30 +674,36 @@ class CueCopilotApp:
             self.hud.set_status("🟢 LISTENING", "#4ECCA3")
             return
 
-        screen_text = ocr_image(img)
-        # Right tool for the screen: text-heavy screens (MCQ, code, errors, theory) are read with OCR and
-        # answered by the stronger/faster text model; diagrams and image-heavy screens go to the vision model.
-        kind = classify_screen(screen_text)
-        # Frontier cloud models (Claude/Gemini/GPT-4o) see every screenshot directly with 0 VRAM swap;
-        # local Ollama uses vision only for diagrams to avoid evicting the 7B text model.
         is_cloud = getattr(self.brain, "cloud_enabled", False)
-        use_vision = is_cloud or (bool(self.brain.vision_model) and kind == "diagram")
-        print(f"[Screen] classified as: {kind} -> {'vision model' if use_vision else 'OCR + text model'}")
-        if not use_vision and len(screen_text.strip()) < 10:
-            self.hud.update_cues("⚠️ No readable text on screen. Install a vision model: ollama pull qwen2.5vl:3b")
-            self.hud.set_status("🟢 LISTENING", "#4ECCA3")
-            return
+        if is_cloud:
+            # Frontier Cloud Vision (Claude/Gemini/GPT-4o) reads the screenshot directly —
+            # skip slow local CPU RapidOCR so F9 fires in ~50ms!
+            screen_text = ""
+            use_vision = True
+            print("[Screen] Frontier Cloud Vision -> skipping local OCR for instant capture")
+        else:
+            screen_text = ocr_image(img)
+            kind = classify_screen(screen_text)
+            use_vision = bool(self.brain.vision_model) and kind == "diagram"
+            print(f"[Screen] classified as: {kind} -> {'vision model' if use_vision else 'OCR + text model'}")
+            if not use_vision and len(screen_text.strip()) < 10:
+                self.hud.update_cues("⚠️ No readable text on screen. Install a vision model: ollama pull qwen2.5vl:3b")
+                self.hud.set_status("🟢 LISTENING", "#4ECCA3")
+                return
 
-        first_line = screen_text.splitlines()[0][:70] if screen_text.strip() else "(image)"
+        first_line = screen_text.splitlines()[0][:70] if screen_text.strip() else "Active screen"
         tag = "👁 Vision" if use_vision else "📸 OCR"
         where = "region" if bbox else "screen"
         print(f"[Screen {where}] {tag}: {len(screen_text)} OCR chars, image {img.size}")
-        self.hud.start_stream(f"{tag} {where}: {first_line}…")
+        self.hud.start_stream(f"{tag} {where}: {first_line}")
         self.hud.set_status("👁 LOOKING..." if use_vision else "🧠 SOLVING SCREEN...", "#A78BFA")
 
-        images = [image_to_b64(img)] if use_vision else None
-        prompt = (f"[Screen Capture]\nOCR text hint (may contain errors):\n{screen_text}"
-                  if screen_text.strip() else "[Screen Capture] (no OCR text; rely on the image)")
+        images = [image_to_b64(img, max_side=1280)] if use_vision else None
+        prompt = (
+            f"[Screen Capture]\nOCR text hint (may contain errors):\n{screen_text}"
+            if screen_text.strip()
+            else "[Screen Capture] Read the screenshot directly and answer the question, coding problem, error, or diagram shown."
+        )
         out = []
         for token in self._clean_stream(self.brain.stream_answer(prompt, mode="screen", interrupt=True,
                                                                  images=images)):

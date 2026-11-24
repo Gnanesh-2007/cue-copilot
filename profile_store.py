@@ -101,7 +101,7 @@ def prompt_block(p: dict, resume_chars: int = 2600, jd_chars: int = 1500) -> str
     if not is_filled(p):
         return ""
     viva = (p.get("round") == "Viva")
-    lines = ["[Interview setup - facts about this interview and the candidate; use them]"]
+    lines = ["[Interview setup - background info ONLY; use resume/personal facts ONLY if the question asks about the candidate, their projects, or experience. Ignore resume for general technical/coding questions]"]
     if p.get("company"):
         lines.append(f"{'College / panel' if viva else 'Company'}: {p['company'].strip()}")
     if p.get("role"):
