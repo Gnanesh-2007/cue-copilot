@@ -542,17 +542,17 @@ class CueCopilotApp:
         if len(end) > sent:
             yield end[sent:]
 
-    def _stream_to_hud(self, question: str, mode: str = "verbal", force: bool = False, display_label: str = ""):
+    def _stream_to_hud(self, question: str, mode: str = "verbal", force: bool = False,
+                       display_label: str = "", include_history: bool = False):
         """
-        Streams tokens live from Ollama straight into the HUD.
-        In automatic verbal mode, checks the first few chars for [SKIP] before clearing the HUD
-        so casual banter never overwrites your previous answer.
+        Streams tokens live from Ollama/Cloud straight into the HUD.
+        Standalone questions run 100% fresh (include_history=False) so old topics never leak in;
+        only explicit follow-ups pass include_history=True.
         """
         shown_q = display_label or question
         self.last_question = (question, mode)
         self.hud.set_status("🧠 ANALYZING...", "#A78BFA")
-        # what was said just before this question (names, branch, skills...) so answers use real facts
-        ctx = "\n".join(list(self.transcript_lines)[-9:-1]) if mode == "verbal" else ""
+        ctx = "\n".join(list(self.transcript_lines)[-6:-1]) if (mode == "verbal" and include_history) else ""
 
         if force or mode == "screen":
             self.hud.start_stream(shown_q)
@@ -560,7 +560,7 @@ class CueCopilotApp:
             out = []
             sources_sent = False
             for token in self._clean_stream(self.brain.stream_answer(question, mode=mode, interrupt=True,
-                                                                     context=ctx)):
+                                                                     context=ctx, include_history=include_history)):
                 if not sources_sent and hasattr(self.hud, "set_sources"):
                     self.hud.set_sources(self.brain.last_sources)
                     sources_sent = True
@@ -575,7 +575,7 @@ class CueCopilotApp:
         started = False
         out = []
         for token in self._clean_stream(self.brain.stream_answer(question, mode=mode, interrupt=False,
-                                                                 context=ctx)):
+                                                                 context=ctx, include_history=include_history)):
             if not started:
                 peek_buf += token
                 stripped_up = peek_buf.lstrip().upper()
@@ -1158,7 +1158,8 @@ class CueCopilotApp:
                     f"{combined}"
                 )
                 answered = self._stream_to_hud(
-                    fu_prompt, mode="verbal", force=False, display_label=f"↩ Follow-up: {combined}"
+                    fu_prompt, mode="verbal", force=False, display_label=f"↩ Follow-up: {combined}",
+                    include_history=True,
                 )
                 if answered:
                     self._last_answered_norm = self._normalize_q(combined)

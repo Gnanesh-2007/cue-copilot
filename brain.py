@@ -499,7 +499,7 @@ class CopilotBrain:
         self._cancel_event.set()
 
     def stream_answer(self, question_text: str, mode: str = "verbal", interrupt: bool = False, images=None,
-                      context: str = ""):
+                      context: str = "", include_history: bool = False):
         """
         Generator that streams tokens live from Ollama.
         Yields string chunks as soon as they arrive (~250ms TTFT).
@@ -528,8 +528,8 @@ class CopilotBrain:
                 system_prompt = SCREEN_SYSTEM_PROMPT if mode == "screen" else VERBAL_SYSTEM_PROMPT
             messages = [{"role": "system", "content": system_prompt}]
 
-            # Add recent conversation memory for verbal follow-ups
-            if mode == "verbal" and self.history:
+            # Only attach previous Q&A memory on explicit follow-ups so new topics stay 100% fresh
+            if mode == "verbal" and include_history and self.history:
                 for turn in self.history:
                     messages.append({"role": "user", "content": turn["q"]})
                     messages.append({"role": "assistant", "content": turn["a"]})
@@ -559,10 +559,10 @@ class CopilotBrain:
                                  "project, app or company; write [your project name], [what it does], [tech used] "
                                  "as placeholders the candidate fills in.]")
 
-            if mode == "verbal" and context:
+            if mode == "verbal" and include_history and context:
                 user_content = f"[Recent conversation on the call, for context only]\n{context}\n\n{user_content}"
 
-            if mode == "verbal" and self.said:
+            if mode == "verbal" and include_history and self.said:
                 said_block = "\n".join(f"- {s[:300]}" for s in self.said)
                 user_content = (
                     f"[What the candidate already said]\n"
